@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MM WBCS ACADEMY 9732974125 Online mock test for all comp exam</title>
-    <!-- Firebase SDKs -->
-   
+    
+    <!-- Firebase SDKs (এখন সঠিকভাবে যুক্ত করা হয়েছে) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { max-width: 800px; width: 100%; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -74,7 +77,7 @@
 
 <script>
     // ==========================================
-    // ১. আপনার দেওয়া ৫০টি প্রশ্ন ও উত্তরের ডাটাবেস
+    // ১. ৫০টি প্রশ্ন ও উত্তরের ডাটাবেস
     // ==========================================
     const questionsData = [
         { question: "‘ভারতের জাতীয় কংগ্রেস’-এর প্রথম অধিবেশন কোথায় অনুষ্ঠিত হয়েছিল?", options: ["কলকাতা", "বোম্বাই", "মাদ্রাজ", "এলাহাবাদ"], ans: "B" },
@@ -132,7 +135,6 @@
     // ==========================================
     // ২. ফায়ারবেস এবং গুগল শিট কনফিগারেশন
     // ==========================================
-    // আপনার Firebase Credentials দিয়ে নিচের অংশটি পরিবর্তন করুন
     const firebaseConfig = {
         apiKey: "YOUR_API_KEY",
         authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -142,10 +144,13 @@
         appId: "YOUR_APP_ID"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    // Firebase Init (চেক করা হচ্ছে যেন কোনো ক্র্যাশ না হয়)
+    let db = null;
+    if (typeof firebase !== "undefined" && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+    }
 
-    // আপনার Google Apps Script Executable URL টি এখানে দিন
     const googleSheetUrl = "https://script.google.com/macros/s/AKfycbw9eCgJjrVL-j7VP1bxjzXfgeBsJeLQgya4HWrJP_55MHcIxaYBI9Qhqg1mXY7zf_qWwA/exec";
 
     let studentName = "";
@@ -184,7 +189,7 @@
     }
 
     // ==========================================
-    // ৪. প্রশ্ন ডাইনামিকালি রেন্ডার করা
+    // ৪. প্রশ্ন রেন্ডার করা
     // ==========================================
     function renderQuestions() {
         const container = document.getElementById('questions-container');
@@ -212,7 +217,7 @@
     }
 
     // ==========================================
-    // ৫. ৪০ মিনিটের টাইমার চালু
+    // ৫. টাইমার চালু
     // ==========================================
     function startTimer() {
         timerInterval = setInterval(() => {
@@ -225,7 +230,7 @@
 
             if (timeRemaining <= 0) {
                 clearInterval(timerInterval);
-                alert("৪০ মিনিট সময় শেষ! আপনার টেস্ট স্বয়ংক্রিয়ভাবে সাবমিট হচ্ছে।");
+                alert("৪০ মিনিট সময় শেষ! আপনার টেস্ট স্বয়ংক্রিয়ভাবে সাবমিট হচ্ছে।");
                 submitTest(true);
             }
         }, 1000);
@@ -274,7 +279,7 @@
             }
         });
 
-        // +১ এবং -০.২৫ হিসাব
+        // নম্বর হিসাব (+১ এবং -০.২৫)
         let finalScore = (correctCount * 1) - (wrongCount * 0.25);
         finalScore = Math.max(0, finalScore);
 
@@ -286,22 +291,24 @@
         `;
 
         // ১. ফায়ারবেসে ডাটা সেভ
-        try {
-            await db.collection("merit_list").add({
-                studentName: studentName,
-                studentPhone: studentPhone,
-                correctAnswers: correctCount,
-                wrongAnswers: wrongCount,
-                unanswered: unansweredCount,
-                score: finalScore,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            console.log("Firebase-এ সফলভাবে সেভ হয়েছে!");
-        } catch (err) {
-            console.error("Firebase Error:", err);
+        if (db) {
+            try {
+                await db.collection("merit_list").add({
+                    studentName: studentName,
+                    studentPhone: studentPhone,
+                    correctAnswers: correctCount,
+                    wrongAnswers: wrongCount,
+                    unanswered: unansweredCount,
+                    score: finalScore,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log("Firebase-এ সফলভাবে সেভ হয়েছে!");
+            } catch (err) {
+                console.error("Firebase Error:", err);
+            }
         }
 
-        // ২. গুগল শিটে ডাটা পাঠানো (URLSearchParams ব্যবহার করে)
+        // ২. গুগল শিটে ডাটা পাঠানো
         if (googleSheetUrl && googleSheetUrl !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL") {
             const formData = new URLSearchParams();
             formData.append("name", studentName);
@@ -318,7 +325,7 @@
                 },
                 body: formData.toString()
             })
-            .then(() => console.log("Google Sheet-এ সফলভাবে পাঠানো হয়েছে!"))
+            .then(() => console.log("Google Sheet-এ সফলভাবে পাঠানো হয়েছে!"))
             .catch(err => console.error("Google Sheet Error: ", err));
         }
     }
