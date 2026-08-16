@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Test Exam Portal</title>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { max-width: 800px; width: 100%; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #1e3a8a; }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; color: #334155; }
+        input[type="text"], input[type="tel"] { width: 100%; padding: 12px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 16px; outline: none; box-sizing: border-box; }
+        input:focus { border-color: #3b82f6; }
+        .btn { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: 0.3s; font-weight: bold; width: 100%; margin-top: 10px; display: block; }
+        .btn:hover { background: #1d4ed8; }
+        .btn-success { background: #16a34a; }
+        .btn-success:hover { background: #15803d; }
+        #timer { font-size: 20px; font-weight: bold; color: #dc2626; text-align: center; position: sticky; top: 10px; background: white; padding: 10px; border: 2px solid #dc2626; border-radius: 8px; display: inline-block; left: 50%; transform: translateX(-50%); z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .question-block { margin-bottom: 25px; padding: 20px; border-radius: 8px; background: #f8fafc; border-left: 5px solid #3b82f6; }
+        .options-label { display: block; margin: 10px 0; cursor: pointer; padding: 10px; border-radius: 6px; background: #ffffff; border: 1px solid #e2e8f0; }
+        input[type="radio"] { margin-right: 10px; transform: scale(1.2); }
+        .hidden { display: none; }
+        #result-box { background: #eff6ff; padding: 20px; border-radius: 10px; border: 2px solid #bfdbfe; margin-bottom: 25px; text-align: center; }
+        .correct-ans { background: #dcfce7 !important; border-color: #22c55e !important; color: #15803d; font-weight: bold; }
+        .wrong-ans { background: #fee2e2 !important; border-color: #ef4444 !important; color: #b91c1c; font-weight: bold; }
+        .badge { display: inline-block; padding: 2px 8px; font-size: 12px; font-weight: bold; border-radius: 4px; margin-left: 10px; color: white; }
+        .badge-success { background: #22c55e; }
+        .badge-danger { background: #ef4444; }
+        #error-msg { color: #dc2626; text-align: center; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Screen 1: Login -->
+    <div id="login-screen">
+        <h1>অনলাইন মক টেস্ট পোর্টাল</h1>
+        <h2>পরীক্ষা শুরু করতে আপনার তথ্য দিন</h2>
+        <div class="form-group">
+            <label for="student-name">আপনার নাম:</label>
+            <input type="text" id="student-name" placeholder="নাম লিখুন..." required>
+        </div>
+        <div class="form-group">
+            <label for="student-phone">মোবাইল নম্বর:</label>
+            <input type="tel" id="student-phone" placeholder="১০ ডিজিট নম্বর..." required>
+        </div>
+        <div id="error-msg"></div>
+        <button class="btn" id="start-btn" onclick="validateAndStart()">পরীক্ষা শুরু করুন</button>
+    </div>
+
+    <!-- Screen 2: Quiz -->
+    <div id="quiz-screen" class="hidden">
+        <div id="timer">সময় বাকি: 40:00</div>
+        <h1>মক টেস্ট (৫০ টি প্রশ্ন - ৫০ নম্বর)</h1>
+        <p style="text-align: center; color: #64748b;">(সঠিক উত্তরের জন্য: +১ | ভুল উত্তরের জন্য: -০.২৫)</p>
+        <hr>
+        <form id="quiz-form">
+            <div id="questions-container"></div>
+            <button type="button" class="btn btn-success" onclick="submitTest(false)">মক টেস্ট সাবমিট করুন</button>
+        </form>
+    </div>
+
+    <!-- Screen 3: Result & Review -->
+    <div id="result-screen" class="hidden">
+        <h1>পরীক্ষার ফলাফল ও রিভিউ</h1>
+        <div id="result-box"></div>
+        <hr>
+        <div id="review-container"></div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // ১. আপনার দেওয়া ৫০টি প্রশ্ন ও উত্তরের ডাটাবেস
+    // ==========================================
+    const questionsData = [
+        { question: "‘ভারতের জাতীয় কংগ্রেস’-এর প্রথম অধিবেশন কোথায় অনুষ্ঠিত হয়েছিল?", options: ["কলকাতা", "বোম্বাই", "মাদ্রাজ", "এলাহাবাদ"], ans: "B" },
+        { question: "‘বঙ্গীয় নবজাগরণ’-এর সঙ্গে যুক্ত ‘Young Bengal Movement’-এর প্রতিষ্ঠাতা কে ছিলেন?", options: ["ঈশ্বরচন্দ্র বিদ্যাসাগর", "হেনরি লুই ভিভিয়ান ডিরোজিও", "রাজা রামমোহন রায়", "দেবেন্দ্রনাথ ঠাকুর"], ans: "B" },
+        { question: "পশ্চিমবঙ্গের কোন জেলাটি ‘রেশম শিল্প’-এর জন্য ঐতিহাসিকভাবে বিখ্যাত?", options: ["মুর্শিদাবাদ", "পুরুলিয়া", "জলপাইগুড়ি", "পশ্চিম মেদিনীপুর"], ans: "A" },
+        { question: "পশ্চিমবঙ্গের ‘জলদাপাড়া জাতীয় উদ্যান’ কোন প্রাণীর জন্য বিশেষভাবে বিখ্যাত?", options: ["রয়্যাল বেঙ্গল টাইগার", "একশৃঙ্গ গণ্ডার", "সিংহ", "নীলগাই"], ans: "B" },
+        { question: "ভারতীয় সংবিধানের প্রস্তাবনায় ‘ ধর্মনিরপেক্ষ’ শব্দটি কোন সংশোধনীর মাধ্যমে যুক্ত হয়?", options: ["24তম", "42তম", "44তম", "52তম"], ans: "B" },
+        { question: "ভারতের জাতীয় আয় প্রথমবার সরকারি ভাবে কে হিসাব করেছিলেন?", options: ["ভি. কে. আর. ভি. রাও", "দাদাভাই নওরোজি", "পি. সি. মহলানবিশ", "অমর্ত্য সেন"], ans: "B" },
+        { question: "কম্পিউটারের CPU-এর পূর্ণরূপ কী?", options: ["Central Processing Unit", "Central Program Unit", "Computer Processing Unit", "Central Processor Utility"], ans: "A" },
+        { question: "‘কথাকলি’ কোন রাজ্যের শাস্ত্রীয় নৃত্য?", options: ["তামিলনাড়ু", "কেরল", "ওড়িশা", "কর্ণাটক"], ans: "B" },
+        { question: "Choose the correct article: He is ___ honest man.", options: ["a", "an", "the", "no article"], ans: "B" },
+        { question: "Fill in the blank: He is good ___ mathematics.", options: ["in", "on", "at", "for"], ans: "C" },
+        { question: "Choose the correct sentence:", options: ["He do not know me.", "He does not knows me.", "He does not know me.", "He did not knows me."], ans: "C" },
+        { question: "One word substitution: One who cannot read or write is called—", options: ["Illiterate", "Innocent", "Ignorant", "Amateur"], ans: "A" },
+        { question: "“A blessing in disguise” means—", options: ["A hidden enemy", "Something that seems bad but proves beneficial", "A false promise", "An unexpected punishment"], ans: "B" },
+        { question: "Choose the correct article: The Ganga is ___ sacred river.", options: ["a", "an", "the", "no article"], ans: "A" },
+        { question: "Fill in the blank: She is senior ___ me.", options: ["than", "to", "from", "with"], ans: "B" },
+        { question: "‘Drain of Wealth’ তত্ত্বটি প্রধানত কার সঙ্গে যুক্ত?", options: ["R. C. Dutt", "Dadabhai Naoroji", "Gopal Krishna Gokhale", "Surendranath Banerjee"], ans: "B" },
+        { question: "1773 সালের Regulating Act-এর অন্যতম গুরুত্বপূর্ণ ফলাফল কী ছিল?", options: ["কোম্পানির শাসনের অবসান", "বাংলার গভর্নরকে Governor-General of Bengal করা", "ভারতীয়দের ভোটাধিকার প্রদান", "পৃথক নির্বাচকমণ্ডলী চালু করা"], ans: "B" },
+        { question: "‘হুল’ বিদ্রোহ প্রধানত কোন আদিবাসী সম্প্রদায়ের সঙ্গে যুক্ত?", options: ["মুন্ডা", "সাঁওতাল", "ভীল", "গন্ড"], ans: "B" },
+        { question: "‘Sattriya’ কোন রাজ্যের শাস্ত্রীয় নৃত্য?", options: ["মণিপুর", "অসম", "ওড়িশা", "ত্রিপুরা"], ans: "B" },
+        { question: "‘মরফতলা’ বা ‘লবণাক্ত মাটি’ প্রধানত পশ্চিমবঙ্গের কোন অঞ্চলে দেখা যায়?", options: ["উত্তরবঙ্গ", "সুন্দরবন অঞ্চল", "রাঢ় অঞ্চল", "দার্জিলিং পাহাড়"], ans: "B" },
+        { question: "কোন অঙ্গাণুকে কোষের ‘Powerhouse of the Cell’ বলা হয়?", options: ["Ribosome", "Golgi Body", "Mitochondria", "Lysosome"], ans: "C" },
+        { question: "রাজ্যপালের পদটি ভারতের সংবিধানের কোন অনুচ্ছেদে উল্লেখিত?", options: ["153", "155", "156", "161"], ans: "A" },
+        { question: "লোকসভার স্পিকারকে কে নির্বাচিত করেন?", options: ["রাষ্ট্রপতি", "প্রধানমন্ত্রী", "লোকসভার সদস্যরা", "রাজ্যসভার সদস্যরা"], ans: "C" },
+        { question: "ভারতের ‘NITI Aayog’-এর Ex-officio Chairperson কে?", options: ["রাষ্ট্রপতি", "অর্থমন্ত্রী", "প্রধানমন্ত্রী", "উপরাষ্ট্রপতি"], ans: "C" },
+        { question: "ভারতের Balance of Payments-এর ‘Current Account’-এ কোনটি অন্তর্ভুক্ত হয়?", options: ["বিদেশি ঋণ", "পণ্য ও পরিষেবার বাণিজ্য", "বিদেশি প্রত্যক্ষ বিনিয়োগ", "বৈদেশিক মুদ্রার রিজার্ভ"], ans: "B" },
+        { question: "‘RAM’ কোন ধরনের মেমরি?", options: ["Non-volatile", "Volatile", "Permanent", "Optical"], ans: "B" },
+        { question: "‘Ransomware’ কী ধরনের সাইবার হুমকি?", options: ["Hardware failure", "Malware", "Search engine", "Operating system"], ans: "B" },
+        { question: "‘Thomas Cup’ কোন খেলাটির সঙ্গে যুক্ত?", options: ["Tennis", "Badminton", "Hockey", "Table Tennis"], ans: "B" },
+        { question: "‘Manipuri’ কোন ধরনের শিল্পের সঙ্গে যুক্ত?", options: ["শাস্ত্রীয় নৃত্য", "লোকগান", "চিত্রকলা", "মার্শাল আর্ট"], ans: "A" },
+        { question: "‘Montreal Protocol’ মূলত কোন পরিবেশগত সমস্যার সঙ্গে সম্পর্কিত?", options: ["Global warming", "Ozone layer depletion", "Water pollution", "Deforestation"], ans: "B" },
+        { question: "ভারতের দীর্ঘতম বাঁধ কোনটি?", options: ["ভাকরা", "হিরাকুদ", "টেহরি", "সর্দার সরোবর"], ans: "B" },
+        { question: "‘Indian Association’ প্রতিষ্ঠার সঙ্গে কার নাম বিশেষভাবে যুক্ত?", options: ["Surendranath Banerjee", "Bal Gangadhar Tilak", "Lala Lajpat Rai", "Bipin Chandra Pal"], ans: "A" },
+        { question: "1857 সালের বিদ্রোহের সময় বাংলায় ব্যারাকপুরের ঘটনার সঙ্গে কার নাম সর্বাধিক যুক্ত?", options: ["Mangal Pandey", "Kunwar Singh", "Tantia Tope", "Nana Saheb"], ans: "A" },
+        { question: "‘Permanent Settlement’-এর ফলে বাংলায় প্রধানত কোন শ্রেণি ভূমির উপর স্বত্ব লাভ করে?", options: ["রায়ত", "জমিদার", "মহাজন", "কৃষক সমিতি"], ans: "B" },
+        { question: "কোন গ্যাসটি ‘গ্রিনহাউস গ্যাস’ নয়?", options: ["কার্বন ডাই-অক্সাইড", "মিথেন", "নাইট্রাস অক্সাইড", "নাইট্রোজেন"], ans: "D" },
+        { question: "‘সাইলেন্ট ভ্যালি’ কোন ধরনের জীববৈচিত্র্য সংরক্ষণের জন্য বিশেষভাবে গুরুত্বপূর্ণ?", options: ["মরুভূমির বাস্তুতন্ত্র", "ক্রান্তীয় চিরহরিৎ অরণ্য", "ম্যানগ্রোভ অরণ্য", "তৃণভূমি"], ans: "B" },
+        { question: "পশ্চিমবঙ্গের ‘সিংগালিলা জাতীয় উদ্যান’ কোন বিশেষ ভৌগোলিক অঞ্চলে অবস্থিত?", options: ["সুন্দরবন বদ্বীপ", "দার্জিলিং হিমালয়", "রাঢ় মালভূমি", "গাঙ্গেয় সমভূমি"], ans: "B" },
+        { question: "ভারতীয় সংবিধানের কোন অনুচ্ছেদে ‘Constitutional Remedies’-এর অধিকার রয়েছে?", options: ["14", "19", "21", "32"], ans: "D" },
+        { question: "‘Money Bill’ রাজ্যসভায় সর্বাধিক কতদিন আটকে রাখতে পারে?", options: ["7 দিন", "14 দিন", "21 দিন", "30 দিন"], ans: "B" },
+        { question: "ভারতের CAG-কে কে নিয়োগ করেন?", options: ["প্রধানমন্ত্রী", "সংসদ", "রাষ্ট্রপতি", "সুপ্রিম কোর্ট"], ans: "C" },
+        { question: "‘Primary Deficit’ নির্ণয় করতে Fiscal Deficit থেকে কী বাদ দেওয়া হয়?", options: ["রাজস্ব ঘাটতি", "সুদের অর্থপ্রদান", "মূলধনী ব্যয়", "কর রাজস্ব"], ans: "B" },
+        { question: "‘Stagflation’ বলতে কী বোঝায়?", options: ["মূল্যহ্রাস ও উচ্চ প্রবৃদ্ধি", "উচ্চ মুদ্রাস্ফীতি ও উচ্চ বেকারত্ব/স্থবির প্রবৃদ্ধির সহাবস্থান", "নিম্ন মুদ্রাস্ফীতি ও উচ্চ প্রবৃদ্ধি", "শুধুমাত্র বেকারত্ব বৃদ্ধি"], ans: "B" },
+        { question: "DNA-র Double Helix model কারা প্রস্তাব করেন?", options: ["Darwin ও Wallace", "Watson ও Crick", "Mendel ও Morgan", "Harvey ও Hooke"], ans: "B" },
+        { question: "মানুষের দেহে Insulin কোন অঙ্গের কোন কোষ থেকে নিঃসৃত হয়?", options: ["যকৃতের hepatocyte", "অগ্ন্যাশয়ের Beta cell", "থাইরয়েডের follicular cell", "কিডনির nephron"], ans: "B" },
+        { question: "‘Biomagnification’ বলতে কী বোঝায়?", options: ["জীবের আকার বৃদ্ধি", "খাদ্যশৃঙ্খলের উচ্চস্তরে বিষাক্ত পদার্থের ঘনত্ব বৃদ্ধি", "জীববৈচিত্র্য বৃদ্ধি", "অণুজীবের দ্রুত বৃদ্ধি"], ans: "B" },
+        { question: "‘Eutrophication’ প্রধানত কোন কারণে ঘটে?", options: ["অতিরিক্ত পুষ্টিলবণ জলাশয়ে প্রবেশ", "অতিরিক্ত অক্সিজেন", "মাটিতে নাইট্রোজেনের অভাব", "বায়ুমণ্ডলে কার্বন ডাই-অক্সাইডের হ্রাস"], ans: "A" },
+        { question: "পশ্চিমবঙ্গের কোন জেলায় ‘মুকুটমণিপুর বাঁধ’ অবস্থিত?", options: ["পুরুলিয়া", "বাঁকুড়া", "বীরভূম", "পশ্চিম মেদিনীপুর"], ans: "B" },
+        { question: "‘Davis Cup’ কোন খেলাটির সঙ্গে সম্পর্কিত?", options: ["Badminton", "Tennis", "Cricket", "Football"], ans: "B" },
+        { question: "Choose the correct sentence:", options: ["Neither of the boys have completed their work.", "Neither of the boys has completed his work.", "Neither of the boys have completed his work.", "Neither of the boys has completed their works."], ans: "B" },
+        { question: "“To beat about the bush” means—", options: ["To speak directly", "To avoid coming to the main point", "To work very hard", "To defeat an enemy"], ans: "B" }
+    ];
+
+    // ==========================================
+    // ২. ফায়ারবেস এবং গুগল শিট কনফিগারেশন
+    // ==========================================
+    // আপনার Firebase Credentials দিয়ে নিচের অংশটি পরিবর্তন করুন
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // আপনার Google Apps Script Executable URL টি এখানে দিন
+    const googleSheetUrl = "https://script.google.com/macros/s/AKfycbwQGJ2Wjo7H8M6LyYE8sFOqCpQFXS9QOmIvdPlSwvybdGvrxVfsDmjOUE8oz9DTOGw61w/exec";
+
+    let studentName = "";
+    let studentPhone = "";
+    let timeRemaining = 40 * 60; // ৪০ মিনিট
+    let timerInterval;
+
+    // ==========================================
+    // ৩. ভ্যালিডেশন এবং টেস্ট শুরু
+    // ==========================================
+    function validateAndStart() {
+        const nameInput = document.getElementById('student-name').value.trim();
+        const phoneInput = document.getElementById('student-phone').value.trim();
+        const errorMsg = document.getElementById('error-msg');
+
+        errorMsg.innerText = "";
+
+        if (!nameInput || !phoneInput) {
+            errorMsg.innerText = "দয়া করে নাম এবং মোবাইল নম্বর দুটিই প্রদান করুন।";
+            return;
+        }
+
+        if (phoneInput.length < 10) {
+            errorMsg.innerText = "সঠিক ১০ ডিজিটের নম্বর প্রদান করুন।";
+            return;
+        }
+
+        studentName = nameInput;
+        studentPhone = phoneInput;
+
+        document.getElementById('login-screen').className = 'hidden';
+        document.getElementById('quiz-screen').className = '';
+
+        renderQuestions();
+        startTimer();
+    }
+
+    // ==========================================
+    // ৪. প্রশ্ন ডাইনামিকালি রেন্ডার করা
+    // ==========================================
+    function renderQuestions() {
+        const container = document.getElementById('questions-container');
+        container.innerHTML = '';
+
+        questionsData.forEach((item, index) => {
+            const qNum = index + 1;
+            const optionLetters = ["A", "B", "C", "D"];
+            let optionsHTML = '';
+
+            item.options.forEach((opt, i) => {
+                optionsHTML += `
+                    <label class="options-label" id="label-q${qNum}-${optionLetters[i]}">
+                        <input type="radio" name="q${qNum}" value="${optionLetters[i]}">
+                        <strong>${optionLetters[i]}.</strong> ${opt}
+                    </label>
+                `;
+            });
+
+            const qBlock = document.createElement('div');
+            qBlock.className = 'question-block';
+            qBlock.innerHTML = `<h3>প্রশ্ন ${qNum}: ${item.question}</h3>${optionsHTML}`;
+            container.appendChild(qBlock);
+        });
+    }
+
+    // ==========================================
+    // ৫. ৪০ মিনিটের টাইমার চালু
+    // ==========================================
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeRemaining--;
+            let mins = Math.floor(timeRemaining / 60);
+            let secs = timeRemaining % 60;
+            let formattedMins = mins < 10 ? '0' + mins : mins;
+            let formattedSecs = secs < 10 ? '0' + secs : secs;
+            document.getElementById('timer').innerText = `সময় বাকি: ${formattedMins}:${formattedSecs}`;
+
+            if (timeRemaining <= 0) {
+                clearInterval(timerInterval);
+                alert("৪০ মিনিট সময় শেষ! আপনার টেস্ট স্বয়ংক্রিয়ভাবে সাবমিট হচ্ছে।");
+                submitTest(true);
+            }
+        }, 1000);
+    }
+
+    // ==========================================
+    // ৬. টেস্ট সাবমিট, নম্বর হিসাব ও ডাটা সেভ
+    // ==========================================
+    async function submitTest(isAutoSubmit) {
+        if (!isAutoSubmit && !confirm("আপনি কি নিশ্চিত টেস্ট সাবমিট করতে চান?")) return;
+        clearInterval(timerInterval);
+
+        let correctCount = 0;
+        let wrongCount = 0;
+        let unansweredCount = 0;
+
+        document.getElementById('quiz-screen').className = 'hidden';
+        document.getElementById('result-screen').className = '';
+
+        const reviewContainer = document.getElementById('review-container');
+        reviewContainer.innerHTML = '<h2>উত্তরপত্র পর্যালোচনা (Preview)</h2>';
+
+        questionsData.forEach((item, index) => {
+            const qNum = index + 1;
+            const selectedOpt = document.querySelector(`input[name="q${qNum}"]:checked`);
+            const userAns = selectedOpt ? selectedOpt.value : null;
+
+            if (userAns === null) unansweredCount++;
+            else if (userAns === item.ans) correctCount++;
+            else wrongCount++;
+
+            const cloneBlock = document.getElementsByClassName('question-block')[index].cloneNode(true);
+            reviewContainer.appendChild(cloneBlock);
+
+            const correctLabel = reviewContainer.querySelector(`#label-q${qNum}-${item.ans}`);
+            if (correctLabel) {
+                correctLabel.className += ' correct-ans';
+                correctLabel.innerHTML += ' <span class="badge badge-success">সঠিক উত্তর</span>';
+            }
+            if (userAns && userAns !== item.ans) {
+                const wrongLabel = reviewContainer.querySelector(`#label-q${qNum}-${userAns}`);
+                if (wrongLabel) {
+                    wrongLabel.className += ' wrong-ans';
+                    wrongLabel.innerHTML += ' <span class="badge badge-danger">আপনার উত্তর</span>';
+                }
+            }
+        });
+
+        // +১ এবং -০.২৫ হিসাব
+        let finalScore = (correctCount * 1) - (wrongCount * 0.25);
+        finalScore = Math.max(0, finalScore);
+
+        document.getElementById('result-box').innerHTML = `
+            <h3>পরীক্ষার্থীর নাম: ${studentName}</h3>
+            <p>মোবাইল নম্বর: ${studentPhone}</p>
+            <p style="font-size: 24px; font-weight:bold; color:#1e3a8a;">প্রাপ্ত নম্বর: ${finalScore} / ${questionsData.length}</p>
+            <p>সঠিক: <span style="color:green; font-weight:bold;">${correctCount}</span> | ভুল: <span style="color:red; font-weight:bold;">${wrongCount}</span> | উত্তর দেওয়া হয়নি: ${unansweredCount}</p>
+        `;
+
+        // ১. ফায়ারবেসে ডাটা সেভ
+        try {
+            await db.collection("merit_list").add({
+                studentName: studentName,
+                studentPhone: studentPhone,
+                correctAnswers: correctCount,
+                wrongAnswers: wrongCount,
+                unanswered: unansweredCount,
+                score: finalScore,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log("Firebase-এ সফলভাবে সেভ হয়েছে!");
+        } catch (err) {
+            console.error("Firebase Error:", err);
+        }
+
+        // ২. গুগল শিটে ডাটা পাঠানো (URLSearchParams ব্যবহার করে)
+        if (googleSheetUrl && googleSheetUrl !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL") {
+            const formData = new URLSearchParams();
+            formData.append("name", studentName);
+            formData.append("phone", studentPhone);
+            formData.append("score", finalScore);
+            formData.append("correct", correctCount);
+            formData.append("wrong", wrongCount);
+
+            fetch(googleSheetUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: formData.toString()
+            })
+            .then(() => console.log("Google Sheet-এ সফলভাবে পাঠানো হয়েছে!"))
+            .catch(err => console.error("Google Sheet Error: ", err));
+        }
+    }
+</script>
+</body>
+</html>
